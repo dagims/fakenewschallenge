@@ -266,6 +266,28 @@ def pipeline_test(test, bow_vectorizer, tfreq_vectorizer, tfidf_vectorizer):
 
     return test_set
 
+def pipeline_serve(input_data, bow_vectorizer, tfreq_vectorizer, tfidf_vectorizer):
+    test_set = []
+
+    head = input_data['headline']
+    body = input_data['body']
+
+    head_bow = bow_vectorizer.transform([head]).toarray()
+    head_tf = tfreq_vectorizer.transform(head_bow).toarray()[0].reshape(1, -1)
+    head_tfidf = tfidf_vectorizer.transform([head]).toarray().reshape(1, -1)
+
+    body_bow = bow_vectorizer.transform([body]).toarray()
+    body_tf = tfreq_vectorizer.transform(body_bow).toarray()[0].reshape(1, -1)
+    body_tfidf = tfidf_vectorizer.transform([body]).toarray().reshape(1, -1)
+
+    tfidf_cos = cosine_similarity(head_tfidf, body_tfidf)[0].reshape(1, 1)
+
+    feat_vec = np.squeeze(np.c_[head_tf, body_tf, tfidf_cos])
+    test_set.append(feat_vec)
+    
+    return test_set
+
+
 
 def load_model(sess):
 

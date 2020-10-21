@@ -18,9 +18,12 @@ from util import *
 import random
 import tensorflow as tf
 
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+
 
 # Prompt for mode
-mode = input('mode (load / train)? ')
+mode = input('mode (serve / load / train)? ')
 
 
 # Set file names
@@ -54,6 +57,7 @@ n_train = len(raw_train.instances)
 train_set, train_stances, bow_vectorizer, tfreq_vectorizer, tfidf_vectorizer = \
     pipeline_train(raw_train, raw_test, lim_unigram=lim_unigram)
 feature_size = len(train_set[0])
+print("feature_size: ", feature_size)
 test_set = pipeline_test(raw_test, bow_vectorizer, tfreq_vectorizer, tfidf_vectorizer)
 
 
@@ -83,16 +87,67 @@ loss = tf.reduce_sum(tf.nn.sparse_softmax_cross_entropy_with_logits(logits, stan
 softmaxed_logits = tf.nn.softmax(logits)
 predict = tf.arg_max(softmaxed_logits, 1)
 
+def run_server(tf_sess):
+    class HTTPapi(BaseHTTPRequestHandler):
+        def do_POST(self):
+            content_length = int(self.headers['Content-Length'])
+            content_type = self.headers['Content-Type']
+            if content_type == 'application/json':
+                data = self.rfile.read(content_length)
+                json_data = json.loads(data.decode('utf-8'))
+                if list(json_data.keys()).count('headline') == 1 and \
+                   list(json_data.keys()).count('body') == 1:
+                    input_data = {'headline' : json_data['headline'],
+                                  'body' : json_data['body']}
+                    test_set = pipeline_serve(input_data,
+                                              bow_vectorizer,
+                                              tfreq_vectorizer,
+                                              tfidf_vectorizer)
+                    test_feed_dict = {features_pl: test_set, keep_prob_pl: 1.0}
+                    pred = label_ref_rev[tf_sess.run(predict, feed_dict=test_feed_dict)[0]]
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/plain')
+                    self.end_headers()
+                    self.wfile.write(pred.encode('utf-8'))
+                else:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'text/plain')
+                    self.end_headers()
+                    self.wfile.write("Input should be json with keys 'headline' and 'body'")
+            else:
+                self.send_response(400)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write("Input should be json with keys 'headline' and 'body'")
+    return HTTPapi
+
+
+if mode == 'serve':
+    serve_address = ''
+    serve_port = 13221
+    sess = tf.Session()
+    load_model(sess)
+    server_handler = run_server(sess)
+    httpd = HTTPServer((serve_address, serve_port), server_handler)
+    try:
+        print("Starting Server on port: " + str(serve_port))
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("Exiting....")
+    httpd.server_close()
+
 
 # Load model
 if mode == 'load':
     with tf.Session() as sess:
         load_model(sess)
 
-
         # Predict
         test_feed_dict = {features_pl: test_set, keep_prob_pl: 1.0}
         test_pred = sess.run(predict, feed_dict=test_feed_dict)
+        
+        # Save predictions
+        save_predictions(test_pred, file_predictions)
 
 
 # Train model
@@ -126,6 +181,6 @@ if mode == 'train':
         test_feed_dict = {features_pl: test_set, keep_prob_pl: 1.0}
         test_pred = sess.run(predict, feed_dict=test_feed_dict)
 
+        # Save predictions
+        save_predictions(test_pred, file_predictions)
 
-# Save predictions
-save_predictions(test_pred, file_predictions)
