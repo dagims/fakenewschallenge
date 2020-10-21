@@ -21,6 +21,13 @@ import tensorflow as tf
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 
+import sys
+import grpc
+from concurrent import futures
+sys.path.append("./service_spec")
+import uclnlpfnc_pb2 as pb2
+import uclnlpfnc_pb2_grpc as pb2_grpc
+
 
 # Prompt for mode
 mode = input('mode (serve / load / train)? ')
@@ -87,7 +94,25 @@ loss = tf.reduce_sum(tf.nn.sparse_softmax_cross_entropy_with_logits(logits, stan
 softmaxed_logits = tf.nn.softmax(logits)
 predict = tf.arg_max(softmaxed_logits, 1)
 
-def run_server(tf_sess):
+
+class GRPCapi(pb2_grpc.UCLNLPStanceClassificationServicer):
+    def __init__(self, tf_session):
+        self.tf_session = tf_session
+
+    def stance_classify(self, req, ctxt):
+        headline = req.headline
+        body = req.body
+        input_data = {'headline' : headline,
+                      'body' : body}
+        test_set = pipeline_serve(input_data,
+                                  bow_vectorizer,
+                                  tfreq_vectorizer,
+                                  tfidf_vectorizer)
+        test_feed_dict = {features_pl: test_set, keep_prob_pl: 1.0}
+        pred = label_ref_rev[tf_session.run(predict, feed_dict=test_feed_dict)[0]]
+        return pb2.Stance(stance_class=pred)
+
+def run_server(tf_session):
     class HTTPapi(BaseHTTPRequestHandler):
         def do_POST(self):
             content_length = int(self.headers['Content-Length'])
@@ -104,7 +129,7 @@ def run_server(tf_sess):
                                               tfreq_vectorizer,
                                               tfidf_vectorizer)
                     test_feed_dict = {features_pl: test_set, keep_prob_pl: 1.0}
-                    pred = label_ref_rev[tf_sess.run(predict, feed_dict=test_feed_dict)[0]]
+                    pred = label_ref_rev[tf_session.run(predict, feed_dict=test_feed_dict)[0]]
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/plain')
                     self.end_headers()
@@ -123,18 +148,32 @@ def run_server(tf_sess):
 
 
 if mode == 'serve':
-    serve_address = ''
-    serve_port = 13221
     sess = tf.Session()
     load_model(sess)
-    server_handler = run_server(sess)
-    httpd = HTTPServer((serve_address, serve_port), server_handler)
-    try:
-        print("Starting Server on port: " + str(serve_port))
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("Exiting....")
-    httpd.server_close()
+    serve_port = 13221
+    serve_mode = input('input (rest / grpc)? ')
+    if serve_mode == 'rest':
+        serve_address = ''
+        server_handler = run_server(sess)
+        httpd = HTTPServer((serve_address, serve_port), server_handler)
+        try:
+            print("Starting Server on port: " + str(serve_port))
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("Exiting....")
+            httpd.server_close()
+    elif serve_mode == 'grpc':
+        grpc_server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+        pb2_grpc.add_UCLNLPStanceClassificationServicer_to_server(GRPCapi(sess), grpc_server)
+        grpc_server.add_insecure_port('[::]:' + str(serve_port))
+        grpc_server.start()
+        print("GRPC Server Started on port: " + str(serve_port))
+        try:
+            while True:
+                time.sleep(10)
+        except KeyboardInterrupt:
+            print("Exiting....")
+            server.stop(0)
 
 
 # Load model
