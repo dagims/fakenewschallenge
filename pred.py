@@ -23,6 +23,7 @@ import json
 
 import sys
 import grpc
+import time
 from concurrent import futures
 sys.path.append("./service_spec")
 import uclnlpfnc_pb2 as pb2
@@ -129,7 +130,7 @@ def run_server(tf_session):
                                               tfreq_vectorizer,
                                               tfidf_vectorizer)
                     test_feed_dict = {features_pl: test_set, keep_prob_pl: 1.0}
-                    pred = label_ref_rev[tf_session.run(predict, feed_dict=test_feed_dict)[0]]
+                    pred = label_ref_rev[self.tf_session.run(predict, feed_dict=test_feed_dict)[0]]
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/plain')
                     self.end_headers()
@@ -173,7 +174,7 @@ if mode == 'serve':
                 time.sleep(10)
         except KeyboardInterrupt:
             print("Exiting....")
-            server.stop(0)
+            grpc_server.stop(0)
 
 
 # Load model
