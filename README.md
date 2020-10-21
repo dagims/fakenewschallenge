@@ -82,7 +82,7 @@ saved locally.
 
 ## Reproducing the submission
 
-The `pred.py` script can be run in two different modes: 'load' or
+The `pred.py` script can be run in two different modes: 'serve', 'load' or
 'train'. Upon running the `pred.py` file, the user is requested to input
 the desired mode.
 
@@ -108,9 +108,14 @@ top level of the local directory. The corresponding `save_predictions`
 function is defined in `util.py`. The predictions made are equivalent to
 those submitted during the competition.
 
+Execution of the `pred.py` file in 'serve' is mostly the same as load but
+creates an HTTP RestAPI endpoint on port 13221 which accepts headline and
+body in json formatted body using POST method. The response is a plain text
+from one of the categories of 'agree', 'disagree', 'discuss' and 'unrelated'.
+
 Execution of the `pred.py` file in 'train' mode encompasses steps
-identical to those outlined above with the exception of the model being
-trained as opposed to loaded from file. In this case, the predictions
+identical to those outlined on 'load' mode with the exception of the model 
+being trained as opposed to loaded from file. In this case, the predictions
 will not be identical to those submitted during the competition.
 
 The file name for the predictions can be changed in section '# Set file
