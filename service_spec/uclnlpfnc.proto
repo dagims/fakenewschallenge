@@ -8,7 +8,10 @@ message InputData {
 }
 
 message Stance {
-    string stance_class = 1;
+    float agree = 1;
+    float disagree = 2;
+    float discuss = 3;
+    float unrelated = 4;
 }
 
 service UCLNLPStanceClassification {

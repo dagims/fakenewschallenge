@@ -110,8 +110,13 @@ class GRPCapi(pb2_grpc.UCLNLPStanceClassificationServicer):
                                   tfreq_vectorizer,
                                   tfidf_vectorizer)
         test_feed_dict = {features_pl: test_set, keep_prob_pl: 1.0}
-        pred = label_ref_rev[tf_session.run(predict, feed_dict=test_feed_dict)[0]]
-        return pb2.Stance(stance_class=pred)
+        pred = self.tf_session.run(softmaxed_logits, feed_dict=test_feed_dict)[0]
+        stance_pred = pb2.Stance()
+        stance_pred.agree = pred[0]
+        stance_pred.disagree = pred[1]
+        stance_pred.discuss = pred[2]
+        stance_pred.unrelated = pred[3]
+        return stance_pred
 
 def run_server(tf_session):
     class HTTPapi(BaseHTTPRequestHandler):
@@ -130,11 +135,13 @@ def run_server(tf_session):
                                               tfreq_vectorizer,
                                               tfidf_vectorizer)
                     test_feed_dict = {features_pl: test_set, keep_prob_pl: 1.0}
-                    pred = label_ref_rev[self.tf_session.run(predict, feed_dict=test_feed_dict)[0]]
+                    pred = tf_session.run(softmaxed_logits, feed_dict=test_feed_dict)[0]
+                    labeled_pred = zip(["agree", "disagree", "discuss", "unrelated"],
+                                       ['{:.2f}'.format(s_c) for s_c in pred])
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/plain')
                     self.end_headers()
-                    self.wfile.write(pred.encode('utf-8'))
+                    self.wfile.write(json.dumps(dict(labeled_pred)).encode('utf-8'))
                 else:
                     self.send_response(400)
                     self.send_header('Content-Type', 'text/plain')
