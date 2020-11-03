@@ -29,10 +29,17 @@ sys.path.append("./service_spec")
 import uclnlpfnc_pb2 as pb2
 import uclnlpfnc_pb2_grpc as pb2_grpc
 
+mode = None
+serve_mode = None
+serve_port = None
 
-# Prompt for mode
-mode = input('mode (serve / load / train)? ')
-
+if len(sys.argv) == 4:
+    mode = sys.argv[1]
+    serve_mode = sys.argv[2]
+    serve_port = int(sys.argv[3])
+else:
+    # Prompt for mode
+    mode = input('mode (serve / load / train)? ')
 
 # Set file names
 file_train_instances = "train_stances.csv"
@@ -158,8 +165,10 @@ def run_server(tf_session):
 if mode == 'serve':
     sess = tf.Session()
     load_model(sess)
-    serve_port = 13221
-    serve_mode = input('input (rest / grpc)? ')
+    if serve_port == None:
+        serve_port = 13221
+    if serve_mode == None:
+        serve_mode = input('input (rest / grpc)? ')
     if serve_mode == 'rest':
         serve_address = ''
         server_handler = run_server(sess)
